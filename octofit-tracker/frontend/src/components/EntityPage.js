@@ -14,12 +14,36 @@ function parseApiResponse(data) {
 }
 
 function getBaseUrl() {
+  const customApiUrl = process.env.REACT_APP_API_BASE_URL;
+  if (customApiUrl) {
+    console.log('Using REACT_APP_API_BASE_URL for backend URL:', customApiUrl);
+    return customApiUrl.replace(/\/$/, '');
+  }
+
   const codespace = process.env.REACT_APP_CODESPACE_NAME;
-  if (!codespace) {
-    console.warn('REACT_APP_CODESPACE_NAME is not defined; using http://localhost:8000 fallback');
+  if (codespace) {
+    console.log('Using REACT_APP_CODESPACE_NAME for backend URL:', codespace);
+    return `https://${codespace}-8000.app.github.dev`;
+  }
+
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const hostname = window.location.hostname;
+    const codespaceHostMatch = hostname.match(/^([a-z0-9-]+?)-(3000|8000)\.(?:app\.)?github\.dev$/i);
+    if (codespaceHostMatch) {
+      const codespaceName = codespaceHostMatch[1];
+      console.log('Derived Codespace name from hostname for backend URL:', codespaceName);
+      return `https://${codespaceName}-8000.app.github.dev`;
+    }
+  }
+
+  // In development, use localhost
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Development mode: using http://localhost:8000 for backend URL');
     return 'http://localhost:8000';
   }
-  return `https://${codespace}-8000.app.github.dev`;
+
+  console.warn('No backend URL configuration found; using http://localhost:8000 fallback');
+  return 'http://localhost:8000';
 }
 
 function getTableHeaders(items) {
@@ -59,8 +83,9 @@ export default function EntityPage({ title, endpointName }) {
 
     fetch(endpoint)
       .then((response) => {
+        console.log(`Fetch response status: ${response.status} for ${endpoint}`);
         if (!response.ok) {
-          throw new Error(`HTTP error ${response.status}`);
+          throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
         }
         return response.json();
       })
@@ -71,6 +96,7 @@ export default function EntityPage({ title, endpointName }) {
       })
       .catch((fetchError) => {
         console.error(`Fetch error for ${title}:`, fetchError);
+        console.error('Failed endpoint:', endpoint);
         setError(fetchError.message);
       })
       .finally(() => {
